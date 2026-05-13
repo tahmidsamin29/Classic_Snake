@@ -5,13 +5,13 @@
 #include <stdlib.h>
 
 // constant declarations
-#define WIDTH 800
-#define HEIGHT 600
+#define WIDTH 1000
+#define HEIGHT 800
 #define CELL_SIZE 50
 #define ROW HEIGHT / CELL_SIZE
 #define COLUMN WIDTH / CELL_SIZE
-#define ROW_LIM ROW - 1
-#define COL_LIM COLUMN - 1
+#define ROW_LIM ROW - 2
+#define COL_LIM COLUMN - 2
 #define MAX_LENGTH 120
 
 struct snake
@@ -22,23 +22,24 @@ struct snake
 
 // macros
 #define GRID draw_grid(renderer)
-#define CELL(x, y) fill_cell(renderer, x, y)
-#define X_RNG (rng(COL_LIM, 1) * CELL_SIZE)
-#define Y_RNG (rng(ROW_LIM, 1) * CELL_SIZE)
+#define CELL(x, y, R, G, B) fill_cell(renderer, x, y, R, G, B)
+#define X_RNG (rng(COL_LIM, 2) * CELL_SIZE)
+#define Y_RNG (rng(ROW_LIM, 2) * CELL_SIZE)
 #define FOOD draw_food(renderer, pfood, px_rand, py_rand, blocks, psnake_length)
 #define MOVEMENT movement(renderer, blocks, psnake_length, px_temp, py_temp, px_temp1, py_temp1, pbutton)
 #define SCOREBOARD draw_scoreboard_ui(renderer, score, psnake_length, font, white, texture, surface)
+#define END_SCREEN game_over_screen(renderer, final_score, psnake_length)
 
 void draw_grid(SDL_Renderer *renderer)
 {
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_FRect rect = {0, 0, WIDTH, 1};
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_FRect rect = {0, 0, WIDTH, 2};
     for (int i = 0; i < ROW; i++)
     {
         SDL_RenderFillRect(renderer, &rect);
         rect.y = rect.y + CELL_SIZE;
     }
-    SDL_FRect rect1 = {0, 0, 1, HEIGHT};
+    SDL_FRect rect1 = {0, 0, 2, HEIGHT};
     for (int i = 0; i < COLUMN; i++)
     {
         SDL_RenderFillRect(renderer, &rect1);
@@ -46,9 +47,9 @@ void draw_grid(SDL_Renderer *renderer)
     }
 }
 
-void fill_cell(SDL_Renderer *renderer, int x, int y)
+void fill_cell(SDL_Renderer *renderer, int x, int y, int R, int G, int B)
 {
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_SetRenderDrawColor(renderer, R, G, B, 255);
     SDL_FRect rect = {x, y, CELL_SIZE, CELL_SIZE};
     SDL_RenderFillRect(renderer, &rect);
 }
@@ -148,11 +149,37 @@ void draw_scoreboard_ui(SDL_Renderer *renderer, char score[], int *psnake_length
     SDL_FRect scoreboard = {0, 0, WIDTH, CELL_SIZE};
     SDL_RenderFillRect(renderer, &scoreboard);
 
-    sprintf(score, "SCORE: %d", *psnake_length - 1);
+    sprintf(score, "%d", *psnake_length - 1);
     surface = TTF_RenderText_Solid(font, score, 0, color);
     texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_FRect position_rect = {5, (CELL_SIZE - surface->h) / 2, surface->w, surface->h};
+    SDL_FRect position_rect = {20, (CELL_SIZE - surface->h) / 2, surface->w, surface->h};
     SDL_RenderTexture(renderer, texture, NULL, &position_rect);
+}
+
+void game_over_screen(SDL_Renderer *renderer, char final_score[], int *psnake_length)
+{
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_FRect box = {275, 370, 450, 100};
+    SDL_RenderFillRect(renderer, &box);
+
+    SDL_Color black = {0, 0, 0, 255};
+
+    // game over
+    TTF_Font *font_end = TTF_OpenFont("PressStart2P-Regular.ttf", 40);
+    SDL_Surface *surface = TTF_RenderText_Solid(font_end, "GAME OVER", 0, black);
+    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+
+    SDL_FRect position_rect_go_screen = {box.x + (box.w - surface->w) / 2, box.y + ((box.h - surface->h) / 2) - 10, surface->w, surface->h};
+    SDL_RenderTexture(renderer, texture, NULL, &position_rect_go_screen);
+
+    // final score
+    sprintf(final_score, "Final Score: %d", *psnake_length - 1);
+    TTF_Font *font_finalscore = TTF_OpenFont("PressStart2P-Regular.ttf", 20);
+    SDL_Surface *surface_final = TTF_RenderText_Solid(font_finalscore, final_score, 0, black);
+    SDL_Texture *texture_final = SDL_CreateTextureFromSurface(renderer, surface_final);
+
+    SDL_FRect position_rect_finalscore = {box.x + (box.w - surface_final->w) / 2, box.y + ((box.h - surface_final->h) / 2) + 25, surface_final->w, surface_final->h};
+    SDL_RenderTexture(renderer, texture_final, NULL, &position_rect_finalscore);
 }
 
 SDL_Event event;
@@ -175,16 +202,17 @@ int main()
     SDL_Window *window = SDL_CreateWindow("Classic Snake", WIDTH, HEIGHT, 0);
     SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
 
-    TTF_Font *font = TTF_OpenFont("PressStart2P-Regular.ttf", 24);
+    TTF_Font *font = TTF_OpenFont("PressStart2P-Regular.ttf", 32);
+
     SDL_Color white = {255, 255, 255, 255};
 
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
-    SDL_Surface *surface = TTF_RenderText_Solid(font, "Score: 0", 0, white);
+    SDL_Surface *surface = TTF_RenderText_Solid(font, "0", 0, white);
     SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
 
-    SDL_FRect position_rect = {5, (CELL_SIZE - surface->h) / 2, surface->w, surface->h};
+    SDL_FRect position_rect = {10, (CELL_SIZE - surface->h) / 2, surface->w, surface->h};
     SDL_RenderTexture(renderer, texture, NULL, &position_rect);
 
     // variables
@@ -206,6 +234,7 @@ int main()
     int next_button = 3;
 
     char score[50];
+    char final_score[50];
 
     int collision = 0;
 
@@ -270,16 +299,24 @@ int main()
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
 
-        GRID;
-        SCOREBOARD;
-        FOOD;
+        // box borders
+        for (int i = 0; i < COLUMN; i++)
+        {
+            CELL(i * CELL_SIZE, CELL_SIZE, 255, 255, 255);
+            CELL(i * CELL_SIZE, (ROW - 1) * CELL_SIZE, 255, 255, 255);
+        }
+        for (int i = 0; i < ROW; i++)
+        {
+            CELL(0, i * CELL_SIZE, 255, 255, 255);
+            CELL((COLUMN - 1) * CELL_SIZE, i * CELL_SIZE, 255, 255, 255);
+        }
 
         Uint64 t2 = SDL_GetTicks();
         int time = (t2 - t1);
 
         // collision checker
         {
-            if (blocks[0].xcoord <= 0 || blocks[0].xcoord >= WIDTH || blocks[0].ycoord <= 0 || blocks[0].ycoord >= HEIGHT)
+            if (blocks[0].xcoord <= CELL_SIZE || blocks[0].xcoord >= WIDTH - 2 * CELL_SIZE || blocks[0].ycoord <= 2 * CELL_SIZE || blocks[0].ycoord >= HEIGHT - 2 * CELL_SIZE)
             {
                 collision = 1;
             }
@@ -307,7 +344,16 @@ int main()
         // drawing out the snake
         for (int i = 0; i < snake_length; i++)
         {
-            CELL(blocks[i].xcoord, blocks[i].ycoord);
+            CELL(blocks[i].xcoord, blocks[i].ycoord, 255, 255, 0);
+        }
+
+        GRID;
+        FOOD;
+        SCOREBOARD;
+
+        if (collision == 1)
+        {
+            END_SCREEN;
         }
 
         SDL_Log("%d\n", snake_length);
