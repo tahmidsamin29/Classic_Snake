@@ -171,7 +171,6 @@ int main()
 
     struct snake blocks[MAX_LENGTH] = {{gx, gy}};
 
-    int running = 1;
     int food = 0;
     int *pfood = &food;
     // button is current direction
@@ -180,8 +179,11 @@ int main()
     // next_button is pending direction
     int next_button = 3;
 
+    int collision = 0;
+
     Uint64 t1 = SDL_GetTicks();
 
+    int running = 1;
     while (running)
     {
         int x_temp = blocks[0].xcoord;
@@ -242,20 +244,40 @@ int main()
 
         FOOD;
 
-        for (int i = 0; i < snake_length; i++)
-        {
-            CELL(blocks[i].xcoord, blocks[i].ycoord);
-        }
-
         Uint64 t2 = SDL_GetTicks();
         int time = (t2 - t1);
 
-        if (time >= 100)
+        // collision checker
+        {
+            if (blocks[0].xcoord <= 0 || blocks[0].xcoord >= WIDTH || blocks[0].ycoord <= 0 || blocks[0].ycoord >= HEIGHT)
+            {
+                collision = 1;
+            }
+            else
+            {
+                for (int i = 1; i < snake_length; i++)
+                {
+                    if (blocks[0].xcoord == blocks[i].xcoord && blocks[0].ycoord == blocks[i].ycoord)
+                    {
+                        collision = 1;
+                    }
+                }
+            }
+        }
+
+        // movement loop
+        if (time >= 100 && collision != 1)
         {
 
             MOVEMENT;
             button = next_button;
             t1 = t2;
+        }
+
+        // drawing out the snake
+        for (int i = 0; i < snake_length; i++)
+        {
+            CELL(blocks[i].xcoord, blocks[i].ycoord);
         }
 
         GRID;
