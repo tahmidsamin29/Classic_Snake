@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <time.h>
 #include <stdlib.h>
 
@@ -26,7 +27,7 @@ struct snake
 #define Y_RNG (rng(ROW_LIM, 1) * CELL_SIZE)
 #define FOOD draw_food(renderer, pfood, px_rand, py_rand, blocks, psnake_length)
 #define MOVEMENT movement(renderer, blocks, psnake_length, px_temp, py_temp, px_temp1, py_temp1, pbutton)
-#define SCOREBOARD draw_scoreboard_ui(renderer)
+#define SCOREBOARD draw_scoreboard_ui(renderer, score, psnake_length, font, white, texture, surface)
 
 void draw_grid(SDL_Renderer *renderer)
 {
@@ -141,11 +142,17 @@ void movement(SDL_Renderer *renderer, struct snake blocks[], int *psnake_length,
     }
 }
 
-void draw_scoreboard_ui(SDL_Renderer *renderer)
+void draw_scoreboard_ui(SDL_Renderer *renderer, char score[], int *psnake_length, TTF_Font *font, SDL_Color color, SDL_Texture *texture, SDL_Surface *surface)
 {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_FRect scoreboard = {0, 0, WIDTH, CELL_SIZE};
     SDL_RenderFillRect(renderer, &scoreboard);
+
+    sprintf(score, "SCORE: %d", *psnake_length - 1);
+    surface = TTF_RenderText_Solid(font, score, 0, color);
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FRect position_rect = {5, (CELL_SIZE - surface->h) / 2, surface->w, surface->h};
+    SDL_RenderTexture(renderer, texture, NULL, &position_rect);
 }
 
 SDL_Event event;
@@ -158,8 +165,27 @@ int main()
         SDL_Log("Failed to initialize SDL");
         return -1;
     }
+
+    if (!TTF_Init())
+    {
+        SDL_Log("Failed to initialize TTF");
+        return -1;
+    }
+
     SDL_Window *window = SDL_CreateWindow("Classic Snake", WIDTH, HEIGHT, 0);
     SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
+
+    TTF_Font *font = TTF_OpenFont("PressStart2P-Regular.ttf", 24);
+    SDL_Color white = {255, 255, 255, 255};
+
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+
+    SDL_Surface *surface = TTF_RenderText_Solid(font, "Score: 0", 0, white);
+    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+
+    SDL_FRect position_rect = {5, (CELL_SIZE - surface->h) / 2, surface->w, surface->h};
+    SDL_RenderTexture(renderer, texture, NULL, &position_rect);
 
     // variables
     int gx = 350, gy = 250;
@@ -178,6 +204,8 @@ int main()
     int *pbutton = &button;
     // next_button is pending direction
     int next_button = 3;
+
+    char score[50];
 
     int collision = 0;
 
@@ -242,6 +270,8 @@ int main()
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
 
+        GRID;
+        SCOREBOARD;
         FOOD;
 
         Uint64 t2 = SDL_GetTicks();
@@ -280,14 +310,16 @@ int main()
             CELL(blocks[i].xcoord, blocks[i].ycoord);
         }
 
-        GRID;
-        SCOREBOARD;
         SDL_Log("%d\n", snake_length);
         SDL_RenderPresent(renderer);
     }
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    SDL_DestroySurface(surface);
+    SDL_DestroyTexture(texture);
+    TTF_CloseFont(font);
+    TTF_Quit();
     SDL_Quit();
     return 0;
 }
