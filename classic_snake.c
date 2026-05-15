@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
+#include <SDL3_mixer/SDL_mixer.h>
 #include <time.h>
 #include <stdlib.h>
 
@@ -12,7 +13,7 @@
 #define COLUMN WIDTH / CELL_SIZE
 #define ROW_LIM ROW - 2
 #define COL_LIM COLUMN - 2
-#define MAX_LENGTH 120
+#define MAX_LENGTH 25
 
 struct snake
 {
@@ -25,10 +26,11 @@ struct snake
 #define CELL(x, y, R, G, B) fill_cell(renderer, x, y, R, G, B)
 #define X_RNG (rng(COL_LIM, 2) * CELL_SIZE)
 #define Y_RNG (rng(ROW_LIM, 2) * CELL_SIZE)
-#define FOOD draw_food(renderer, pfood, px_rand, py_rand, blocks, psnake_length)
+#define FOOD draw_food(renderer, pfood, px_rand, py_rand, blocks, psnake_length, pSpeed, pSpeed_update, eat_sound, mixer)
 #define MOVEMENT movement(renderer, blocks, psnake_length, px_temp, py_temp, px_temp1, py_temp1, pbutton)
 #define SCOREBOARD draw_scoreboard_ui(renderer, score, psnake_length, font, white, texture, surface)
 #define END_SCREEN game_over_screen(renderer, final_score, psnake_length)
+#define TITLE_SCREEN title_screen(renderer)
 
 void draw_grid(SDL_Renderer *renderer)
 {
@@ -60,7 +62,7 @@ int rng(int rmax, int rmin)
     return rnum;
 }
 
-void draw_food(SDL_Renderer *renderer, int *food, int *x, int *y, struct snake blocks[], int *psnake_length)
+void draw_food(SDL_Renderer *renderer, int *food, int *x, int *y, struct snake blocks[], int *psnake_length, int *pSpeed, int *pSpeed_update, MIX_Audio *eat_sound, MIX_Mixer *mixer)
 {
     SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
 
@@ -80,6 +82,16 @@ void draw_food(SDL_Renderer *renderer, int *food, int *x, int *y, struct snake b
 
     else if (blocks[0].xcoord == *x && blocks[0].ycoord == *y)
     {
+        MIX_PlayAudio(mixer, eat_sound);
+        // speed increaser starting from 200
+        int Speed_count = 0;
+        if ((*psnake_length - 1) % 3 == 0 && Speed_count < 17)
+        {
+            *pSpeed = *pSpeed - *pSpeed_update;
+            Speed_count++;
+        }
+
+        // drawing food
         *x = X_RNG;
         *y = Y_RNG;
         int position = 1;
@@ -182,32 +194,73 @@ void game_over_screen(SDL_Renderer *renderer, char final_score[], int *psnake_le
     SDL_RenderTexture(renderer, texture_final, NULL, &position_rect_finalscore);
 }
 
+void title_screen(SDL_Renderer *renderer)
+{
+
+    // title
+    TTF_Font *font = TTF_OpenFont("PressStart2P-Regular.ttf", 60);
+    SDL_Color white = {255, 255, 255, 255};
+
+    SDL_Surface *surface = TTF_RenderText_Solid(font, "CLASSIC SNAKE", 0, white);
+    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+
+    SDL_FRect position_rect_title = {(WIDTH - surface->w) / 2, (HEIGHT - surface->h) / 2 - 30, surface->w, surface->h};
+    SDL_RenderTexture(renderer, texture, NULL, &position_rect_title);
+
+    // press enter to play
+    TTF_Font *font_hit = TTF_OpenFont("PressStart2P-Regular.ttf", 20);
+    SDL_Surface *surface_hit = TTF_RenderText_Solid(font_hit, "Press enter to play", 0, white);
+    SDL_Texture *texture_hit = SDL_CreateTextureFromSurface(renderer, surface_hit);
+
+    SDL_FRect position_rect_title_hit = {(WIDTH - surface_hit->w) / 2, (HEIGHT - surface_hit->h) / 2 + 30, surface_hit->w, surface_hit->h};
+    SDL_RenderTexture(renderer, texture_hit, NULL, &position_rect_title_hit);
+}
+
 SDL_Event event;
 int main()
 {
     srand(time(NULL));
 
-    if (!SDL_Init(SDL_INIT_VIDEO))
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
     {
-        SDL_Log("Failed to initialize SDL");
+        SDL_Log("Failed to initialize SDL: %s\n", SDL_GetError());
         return -1;
     }
 
     if (!TTF_Init())
     {
-        SDL_Log("Failed to initialize TTF");
+        SDL_Log("Failed to initialize SDL_TTF : %s\n", SDL_GetError());
+        return -1;
+    }
+
+    if (!MIX_Init())
+    {
+        SDL_Log("Failed to initialize SDL_Mixer : %s\n", SDL_GetError());
         return -1;
     }
 
     SDL_Window *window = SDL_CreateWindow("Classic Snake", WIDTH, HEIGHT, 0);
     SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
 
+    SDL_AudioDeviceID device =
+        SDL_OpenAudioDevice(
+            SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
+
+    MIX_Mixer *mixer = MIX_CreateMixerDevice(device, NULL);
+
+    if (!mixer)
+    {
+        printf("Failed to create mixer: %s\n", SDL_GetError());
+        return -1;
+    }
+
+    MIX_Audio *eat_sound = MIX_LoadAudio(mixer, "music_food.wav", true);
+    MIX_Audio *gameover_sound = MIX_LoadAudio(mixer, "music_gameover.wav", true);
+    MIX_Audio *enterbutton_sound = MIX_LoadAudio(mixer, "enter_button.wav", true);
+
     TTF_Font *font = TTF_OpenFont("PressStart2P-Regular.ttf", 32);
 
     SDL_Color white = {255, 255, 255, 255};
-
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
 
     SDL_Surface *surface = TTF_RenderText_Solid(font, "0", 0, white);
     SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
@@ -238,6 +291,16 @@ int main()
 
     int collision = 0;
 
+    int enter = 0;
+
+    int gameover_sfx_count = 0;
+    int enter_sfx_count = 0;
+
+    int Speed = 200;
+    int *pSpeed = &Speed;
+    int Speed_update = 9;
+    int *pSpeed_update = &Speed_update;
+
     Uint64 t1 = SDL_GetTicks();
 
     int running = 1;
@@ -253,7 +316,7 @@ int main()
         int y_temp1;
         int *py_temp1 = &y_temp1;
 
-        if (SDL_PollEvent(&event))
+        while (SDL_PollEvent(&event))
         {
             if (event.type == SDL_EVENT_QUIT)
             {
@@ -261,6 +324,11 @@ int main()
             }
             if (event.type == SDL_EVENT_KEY_DOWN)
             {
+                if (enter == 0 && event.key.key == SDLK_RETURN)
+                {
+                    enter = 1;
+                }
+
                 if (event.key.key == SDLK_DOWN)
                 {
 
@@ -299,63 +367,84 @@ int main()
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
 
-        // box borders
-        for (int i = 0; i < COLUMN; i++)
+        if (enter == 0)
         {
-            CELL(i * CELL_SIZE, CELL_SIZE, 255, 255, 255);
-            CELL(i * CELL_SIZE, (ROW - 1) * CELL_SIZE, 255, 255, 255);
+            TITLE_SCREEN;
         }
-        for (int i = 0; i < ROW; i++)
+        else
         {
-            CELL(0, i * CELL_SIZE, 255, 255, 255);
-            CELL((COLUMN - 1) * CELL_SIZE, i * CELL_SIZE, 255, 255, 255);
-        }
-
-        Uint64 t2 = SDL_GetTicks();
-        int time = (t2 - t1);
-
-        // collision checker
-        {
-            if (blocks[0].xcoord <= CELL_SIZE || blocks[0].xcoord >= WIDTH - 2 * CELL_SIZE || blocks[0].ycoord <= 2 * CELL_SIZE || blocks[0].ycoord >= HEIGHT - 2 * CELL_SIZE)
+            if (enter_sfx_count == 0)
             {
-                collision = 1;
+                MIX_PlayAudio(mixer, enterbutton_sound);
+                enter_sfx_count++;
             }
-            else
+
+            // box borders
+            for (int i = 0; i < COLUMN; i++)
             {
-                for (int i = 1; i < snake_length; i++)
+                CELL(i * CELL_SIZE, CELL_SIZE, 255, 255, 255);
+                CELL(i * CELL_SIZE, (ROW - 1) * CELL_SIZE, 255, 255, 255);
+            }
+            for (int i = 0; i < ROW; i++)
+            {
+                CELL(0, i * CELL_SIZE, 255, 255, 255);
+                CELL((COLUMN - 1) * CELL_SIZE, i * CELL_SIZE, 255, 255, 255);
+            }
+
+            Uint64 t2 = SDL_GetTicks();
+            int time = (t2 - t1);
+
+            // movement loop
+            if (time >= Speed && collision != 1)
+            {
+                button = next_button;
+                MOVEMENT;
+                // collision checker
+                if (blocks[0].xcoord < CELL_SIZE || blocks[0].xcoord > WIDTH - 2 * CELL_SIZE || blocks[0].ycoord < 2 * CELL_SIZE || blocks[0].ycoord > HEIGHT - 2 * CELL_SIZE)
                 {
-                    if (blocks[0].xcoord == blocks[i].xcoord && blocks[0].ycoord == blocks[i].ycoord)
+                    collision = 1;
+                }
+                else
+                {
+                    for (int i = 1; i < snake_length; i++)
                     {
-                        collision = 1;
+                        if (blocks[0].xcoord == blocks[i].xcoord && blocks[0].ycoord == blocks[i].ycoord)
+                        {
+                            collision = 1;
+                        }
                     }
+                }
+                t1 = t2;
+            }
+
+            // drawing out the snake
+            for (int i = 0; i < snake_length; i++)
+            {
+                if (i == 0)
+                {
+                    CELL(blocks[i].xcoord, blocks[i].ycoord, 0, 0, 255);
+                }
+                else
+                {
+                    CELL(blocks[i].xcoord, blocks[i].ycoord, 0, 255, 0);
+                }
+            }
+
+            FOOD;
+            GRID;
+            SCOREBOARD;
+
+            if (collision == 1)
+            {
+
+                END_SCREEN;
+                if (gameover_sfx_count == 0)
+                {
+                    MIX_PlayAudio(mixer, gameover_sound);
+                    gameover_sfx_count++;
                 }
             }
         }
-
-        // movement loop
-        if (time >= 100 && collision != 1)
-        {
-
-            MOVEMENT;
-            button = next_button;
-            t1 = t2;
-        }
-
-        // drawing out the snake
-        for (int i = 0; i < snake_length; i++)
-        {
-            CELL(blocks[i].xcoord, blocks[i].ycoord, 255, 255, 0);
-        }
-
-        GRID;
-        FOOD;
-        SCOREBOARD;
-
-        if (collision == 1)
-        {
-            END_SCREEN;
-        }
-
         SDL_Log("%d\n", snake_length);
         SDL_RenderPresent(renderer);
     }
